@@ -28,3 +28,37 @@ def validate_portfolio(portfolio: pd.DataFrame) -> None:
     total = portfolio["weight"].sum()
     if not np.isclose(total, 1.0):
         raise ValueError(f"Portfolio weights must sum to 1.0, got {total}")
+
+
+def validate_market_data(
+    prices: pd.DataFrame,
+    expected_tickers: list[str],
+    max_missing_pct: float = 0.01,
+) -> None:
+    if prices.empty:
+        raise ValueError("Market data is empty")
+
+    missing_tickers = [ticker for ticker in expected_tickers if ticker not in prices.columns]
+    if missing_tickers:
+        raise ValueError(f"Market data is missing tickers: {missing_tickers}")
+
+    duplicate_dates = prices.index[prices.index.duplicated()].unique()
+    if len(duplicate_dates) > 0:
+        raise ValueError(f"Market data contains duplicate dates: {list(duplicate_dates)}")
+
+    if not prices.index.is_monotonic_increasing:
+        raise ValueError("Market data is not in chronological order")
+
+    non_positive = prices.columns[(prices <= 0).any()]
+    if len(non_positive) > 0:
+        raise ValueError(
+            f"Market data contains non-positive prices for tickers: {list(non_positive)}"
+        )
+
+    missing_pct = prices.isna().mean()
+    excessive = missing_pct[missing_pct > max_missing_pct]
+    if not excessive.empty:
+        reported = ", ".join(f"{ticker} {pct:.2%}" for ticker, pct in excessive.items())
+        raise ValueError(
+            f"Market data exceeds {max_missing_pct:.2%} missing values for tickers: {reported}"
+        )
