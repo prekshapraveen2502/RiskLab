@@ -92,6 +92,7 @@ def kupiec_unconditional_coverage_test(
     )
 
     lr_statistic = 2 * (log_likelihood_unrestricted - log_likelihood_null)
+    lr_statistic = max(float(lr_statistic), 0.0)
     p_value = float(chi2.sf(lr_statistic, df=1))
 
     return {
@@ -99,7 +100,7 @@ def kupiec_unconditional_coverage_test(
         "breaches": breach_count,
         "observed_breach_rate": observed_breach_rate,
         "expected_breach_rate": expected_breach_rate,
-        "lr_statistic": float(lr_statistic),
+        "lr_statistic": lr_statistic,
         "p_value": p_value,
         "significance_level": float(significance_level),
         "reject_null": bool(p_value < significance_level),

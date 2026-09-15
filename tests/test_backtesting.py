@@ -197,7 +197,8 @@ def test_kupiec_accepts_exact_expected_coverage():
     assert result["breaches"] == 5
     assert result["observed_breach_rate"] == pytest.approx(0.05)
     assert result["expected_breach_rate"] == pytest.approx(0.05)
-    assert result["lr_statistic"] == pytest.approx(0.0, abs=1e-9)
+    assert result["lr_statistic"] == pytest.approx(0.0)
+    assert result["lr_statistic"] >= 0.0
     assert result["p_value"] == pytest.approx(1.0)
     assert result["reject_null"] is False
 
