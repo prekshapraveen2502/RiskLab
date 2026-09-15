@@ -1,0 +1,44 @@
+{
+  "portfolio": {
+    "tickers": [
+      "SPY",
+      "QQQ",
+      "TLT",
+      "HYG",
+      "GLD"
+    ],
+    "weights": {
+      "SPY": 0.3,
+      "QQQ": 0.2,
+      "TLT": 0.2,
+      "HYG": 0.15,
+      "GLD": 0.15
+    }
+  },
+  "analysis_period": {
+    "start_date": "2018-01-02",
+    "end_date": "2026-08-31",
+    "price_observations": 2177,
+    "return_observations": 2176
+  },
+  "risk_metrics": {
+    "historical_var_95": 0.011643262440170518,
+    "expected_shortfall_95": 0.01789505669651638
+  },
+  "backtest": {
+    "observations": 1926,
+    "breaches": 105,
+    "breach_rate": 0.05451713395638629,
+    "expected_breach_rate": 0.050000000000000044
+  },
+  "kupiec_test": {
+    "observations": 1926,
+    "breaches": 105,
+    "observed_breach_rate": 0.05451713395638629,
+    "expected_breach_rate": 0.050000000000000044,
+    "lr_statistic": 0.8047597435363514,
+    "p_value": 0.36967408369549404,
+    "significance_level": 0.05,
+    "reject_null": false
+  }
+}

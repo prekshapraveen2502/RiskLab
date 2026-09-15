@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -22,6 +23,15 @@ ROLLING_WINDOW = 250
 CONFIDENCE_LEVEL = 0.95
 
 PORTFOLIO_PATH = Path(__file__).parent / "config" / "portfolio.csv"
+DATA_DIR = Path(__file__).parent / "data"
+
+SUMMARY_SECTIONS = (
+    "portfolio",
+    "analysis_period",
+    "risk_metrics",
+    "backtest",
+    "kupiec_test",
+)
 
 
 def load_portfolio(portfolio_path: Path = PORTFOLIO_PATH) -> pd.DataFrame:
@@ -153,6 +163,52 @@ def format_summary(results: dict) -> str:
     )
 
 
+def output_paths(data_dir: Path = DATA_DIR) -> dict:
+    return {
+        "prices": data_dir / "raw" / "prices.parquet",
+        "asset_returns": data_dir / "processed" / "asset_returns.parquet",
+        "portfolio_returns": data_dir / "processed" / "portfolio_returns.parquet",
+        "rolling_var": data_dir / "processed" / "rolling_historical_var.parquet",
+        "breaches": data_dir / "processed" / "var_breaches.parquet",
+        "risk_summary": data_dir / "processed" / "risk_summary.json",
+    }
+
+
+def build_risk_summary(results: dict) -> dict:
+    return {section: results[section] for section in SUMMARY_SECTIONS}
+
+
+def save_analysis_outputs(results: dict, data_dir: Path = DATA_DIR) -> None:
+    paths = output_paths(data_dir)
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = results["data"]
+
+    data["prices"].to_parquet(paths["prices"])
+    data["asset_returns"].to_parquet(paths["asset_returns"])
+    data["portfolio_returns"].to_frame().to_parquet(paths["portfolio_returns"])
+    data["rolling_var"].to_frame().to_parquet(paths["rolling_var"])
+    data["breaches"].to_frame().to_parquet(paths["breaches"])
+
+    # allow_nan=False refuses to emit NaN/Infinity, which are not valid JSON.
+    paths["risk_summary"].write_text(
+        json.dumps(build_risk_summary(results), indent=2, allow_nan=False) + "\n"
+    )
+
+
+def format_output_confirmation(data_dir: Path = DATA_DIR) -> str:
+    root = data_dir.parent
+    lines = ["Outputs written:"]
+    lines += [
+        f"  {path.relative_to(root)}" for path in output_paths(data_dir).values()
+    ]
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     results = run_analysis()
     print(format_summary(results))
+    save_analysis_outputs(results)
+    print()
+    print(format_output_confirmation())
