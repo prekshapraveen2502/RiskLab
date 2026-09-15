@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.risk.backtesting import detect_var_breaches
+from src.risk.backtesting import detect_var_breaches, summarize_var_backtest
 
 DATES = pd.to_datetime(
     ["2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07"]
@@ -94,3 +94,82 @@ def test_detect_var_breaches_does_not_modify_inputs():
 
     pd.testing.assert_series_equal(returns, original_returns)
     pd.testing.assert_series_equal(forecasts, original_forecasts)
+
+
+def make_breaches(values):
+    return pd.Series(values, dtype="boolean", name="var_breach")
+
+
+def test_summarize_var_backtest_returns_expected_metrics():
+    breaches = make_breaches([pd.NA, False, True, False, True, pd.NA, False])
+
+    summary = summarize_var_backtest(breaches)
+
+    assert summary == {
+        "observations": 5,
+        "breaches": 2,
+        "breach_rate": pytest.approx(0.4),
+        "expected_breach_rate": pytest.approx(0.05),
+    }
+
+
+def test_missing_forecasts_are_excluded_from_denominator():
+    evaluated_only = make_breaches([False, True, False, True, False])
+    with_missing = make_breaches([pd.NA, False, True, False, True, pd.NA, False])
+
+    assert summarize_var_backtest(with_missing) == summarize_var_backtest(evaluated_only)
+    assert summarize_var_backtest(with_missing)["observations"] == 5
+
+
+def test_summary_without_breaches():
+    breaches = make_breaches([pd.NA, False, False, False])
+
+    summary = summarize_var_backtest(breaches)
+
+    assert summary["observations"] == 3
+    assert summary["breaches"] == 0
+    assert summary["breach_rate"] == 0.0
+
+
+def test_summary_when_all_evaluated_observations_breach():
+    breaches = make_breaches([pd.NA, True, True, True])
+
+    summary = summarize_var_backtest(breaches)
+
+    assert summary["observations"] == 3
+    assert summary["breaches"] == 3
+    assert summary["breach_rate"] == 1.0
+
+
+def test_summary_requires_evaluated_forecasts():
+    breaches = make_breaches([pd.NA, pd.NA, pd.NA])
+
+    with pytest.raises(ValueError, match="No evaluated VaR forecasts available"):
+        summarize_var_backtest(breaches)
+
+
+@pytest.mark.parametrize("confidence_level", [0, 1, -0.10, 1.10])
+def test_summary_rejects_invalid_confidence_levels(confidence_level):
+    breaches = make_breaches([False, True, False])
+
+    with pytest.raises(ValueError, match="Confidence level must be between 0 and 1"):
+        summarize_var_backtest(breaches, confidence_level=confidence_level)
+
+
+def test_summary_uses_custom_confidence_level():
+    breaches = make_breaches([False, True, False, False])
+
+    summary = summarize_var_backtest(breaches, confidence_level=0.99)
+
+    assert summary["expected_breach_rate"] == pytest.approx(0.01)
+
+
+def test_summary_uses_builtin_python_types():
+    breaches = make_breaches([pd.NA, False, True, False, True, pd.NA, False])
+
+    summary = summarize_var_backtest(breaches)
+
+    assert type(summary["observations"]) is int
+    assert type(summary["breaches"]) is int
+    assert type(summary["breach_rate"]) is float
+    assert type(summary["expected_breach_rate"]) is float
