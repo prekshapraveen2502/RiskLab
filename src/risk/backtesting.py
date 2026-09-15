@@ -1,4 +1,7 @@
+from math import log
+
 import pandas as pd
+from scipy.stats import chi2
 
 
 def detect_var_breaches(
@@ -48,4 +51,56 @@ def summarize_var_backtest(
         "breaches": breach_count,
         "breach_rate": float(breach_count / observations),
         "expected_breach_rate": float(1 - confidence_level),
+    }
+
+
+def _binomial_log_likelihood(
+    observations: int,
+    breach_count: int,
+    breach_probability: float,
+) -> float:
+    non_breach_count = observations - breach_count
+
+    breach_term = breach_count * log(breach_probability) if breach_count else 0.0
+    non_breach_term = (
+        non_breach_count * log(1 - breach_probability) if non_breach_count else 0.0
+    )
+
+    return breach_term + non_breach_term
+
+
+def kupiec_unconditional_coverage_test(
+    breaches: pd.Series,
+    confidence_level: float = 0.95,
+    significance_level: float = 0.05,
+) -> dict:
+    if not 0 < significance_level < 1:
+        raise ValueError("Significance level must be between 0 and 1")
+
+    summary = summarize_var_backtest(breaches, confidence_level=confidence_level)
+
+    observations = summary["observations"]
+    breach_count = summary["breaches"]
+    observed_breach_rate = summary["breach_rate"]
+    expected_breach_rate = summary["expected_breach_rate"]
+
+    log_likelihood_null = _binomial_log_likelihood(
+        observations, breach_count, expected_breach_rate
+    )
+    log_likelihood_unrestricted = _binomial_log_likelihood(
+        observations, breach_count, observed_breach_rate
+    )
+
+    lr_statistic = 2 * (log_likelihood_unrestricted - log_likelihood_null)
+    p_value = float(chi2.sf(lr_statistic, df=1))
+
+    return {
+        "observations": observations,
+        "breaches": breach_count,
+        "observed_breach_rate": observed_breach_rate,
+        "expected_breach_rate": expected_breach_rate,
+        "lr_statistic": float(lr_statistic),
+        "p_value": p_value,
+        "significance_level": float(significance_level),
+        "reject_null": bool(p_value < significance_level),
     }

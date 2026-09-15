@@ -1,7 +1,13 @@
+import math
+
 import pandas as pd
 import pytest
 
-from src.risk.backtesting import detect_var_breaches, summarize_var_backtest
+from src.risk.backtesting import (
+    detect_var_breaches,
+    kupiec_unconditional_coverage_test,
+    summarize_var_backtest,
+)
 
 DATES = pd.to_datetime(
     ["2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07"]
@@ -173,3 +179,136 @@ def test_summary_uses_builtin_python_types():
     assert type(summary["breaches"]) is int
     assert type(summary["breach_rate"]) is float
     assert type(summary["expected_breach_rate"]) is float
+
+
+def make_breach_sample(observations, breach_count, warmup=0):
+    values = (
+        [pd.NA] * warmup
+        + [True] * breach_count
+        + [False] * (observations - breach_count)
+    )
+    return make_breaches(values)
+
+
+def test_kupiec_accepts_exact_expected_coverage():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(100, 5))
+
+    assert result["observations"] == 100
+    assert result["breaches"] == 5
+    assert result["observed_breach_rate"] == pytest.approx(0.05)
+    assert result["expected_breach_rate"] == pytest.approx(0.05)
+    assert result["lr_statistic"] == pytest.approx(0.0, abs=1e-9)
+    assert result["p_value"] == pytest.approx(1.0)
+    assert result["reject_null"] is False
+
+
+def test_kupiec_rejects_excessive_breaches():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(100, 12))
+
+    assert result["observations"] == 100
+    assert result["breaches"] == 12
+    assert result["observed_breach_rate"] == pytest.approx(0.12)
+    assert result["lr_statistic"] == pytest.approx(7.5401961229627545)
+    assert result["p_value"] == pytest.approx(0.006033747461594096)
+    assert result["reject_null"] is True
+
+
+def test_kupiec_does_not_reject_moderate_deviation():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(100, 8))
+
+    assert result["observations"] == 100
+    assert result["breaches"] == 8
+    assert result["lr_statistic"] == pytest.approx(1.615808190455681)
+    assert result["p_value"] == pytest.approx(0.2036772675975769)
+    assert result["reject_null"] is False
+
+
+def test_kupiec_handles_zero_breaches():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(100, 0))
+
+    assert result["breaches"] == 0
+    assert result["observed_breach_rate"] == 0.0
+    assert math.isfinite(result["lr_statistic"])
+    assert result["lr_statistic"] == pytest.approx(10.258658877510115)
+    assert result["p_value"] == pytest.approx(0.0013604454302787966)
+    assert result["reject_null"] is True
+
+
+def test_kupiec_handles_all_breaches():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(5, 5))
+
+    assert result["observations"] == 5
+    assert result["breaches"] == 5
+    assert result["observed_breach_rate"] == 1.0
+    assert math.isfinite(result["lr_statistic"])
+    assert math.isfinite(result["p_value"])
+    assert result["lr_statistic"] == pytest.approx(29.9573227355399)
+
+
+def test_kupiec_excludes_warmup_observations():
+    warmed = kupiec_unconditional_coverage_test(make_breach_sample(100, 5, warmup=25))
+
+    assert warmed["observations"] == 100
+    assert warmed == kupiec_unconditional_coverage_test(make_breach_sample(100, 5))
+
+
+def test_kupiec_significance_level_changes_only_the_decision():
+    breaches = make_breach_sample(100, 8)
+
+    strict = kupiec_unconditional_coverage_test(breaches, significance_level=0.05)
+    lenient = kupiec_unconditional_coverage_test(breaches, significance_level=0.25)
+
+    assert strict["lr_statistic"] == lenient["lr_statistic"]
+    assert strict["p_value"] == lenient["p_value"]
+    assert strict["significance_level"] == pytest.approx(0.05)
+    assert lenient["significance_level"] == pytest.approx(0.25)
+    assert strict["reject_null"] is False
+    assert lenient["reject_null"] is True
+
+
+@pytest.mark.parametrize("significance_level", [0, 1, -0.10, 1.10])
+def test_kupiec_rejects_invalid_significance_levels(significance_level):
+    breaches = make_breach_sample(100, 5)
+
+    with pytest.raises(ValueError, match="Significance level must be between 0 and 1"):
+        kupiec_unconditional_coverage_test(
+            breaches, significance_level=significance_level
+        )
+
+
+@pytest.mark.parametrize("confidence_level", [0, 1, -0.10, 1.10])
+def test_kupiec_rejects_invalid_confidence_levels(confidence_level):
+    breaches = make_breach_sample(100, 5)
+
+    with pytest.raises(ValueError, match="Confidence level must be between 0 and 1"):
+        kupiec_unconditional_coverage_test(breaches, confidence_level=confidence_level)
+
+
+def test_kupiec_uses_custom_confidence_level():
+    result = kupiec_unconditional_coverage_test(
+        make_breach_sample(100, 5), confidence_level=0.99
+    )
+
+    assert result["expected_breach_rate"] == pytest.approx(0.01)
+    assert result["observed_breach_rate"] == pytest.approx(0.05)
+    assert result["reject_null"] is True
+
+
+def test_kupiec_requires_evaluated_forecasts():
+    breaches = make_breaches([pd.NA, pd.NA, pd.NA])
+
+    with pytest.raises(ValueError, match="No evaluated VaR forecasts available"):
+        kupiec_unconditional_coverage_test(breaches)
+
+
+def test_kupiec_uses_builtin_python_types():
+    result = kupiec_unconditional_coverage_test(make_breach_sample(100, 8))
+
+    assert type(result["observations"]) is int
+    assert type(result["breaches"]) is int
+    assert type(result["observed_breach_rate"]) is float
+    assert type(result["expected_breach_rate"]) is float
+    assert type(result["lr_statistic"]) is float
+    assert type(result["p_value"]) is float
+    assert type(result["significance_level"]) is float
+    assert type(result["reject_null"]) is bool
