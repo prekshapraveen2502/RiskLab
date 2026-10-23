@@ -86,7 +86,7 @@ Orchestration is a single function, `run_analysis()` in `run_pipeline.py`. Each 
 
 **External data sits behind a protocol.** `MarketDataProvider` is a one-method `typing.Protocol`, and `run_analysis(provider=...)` accepts any implementation. Tests inject a `FakeProvider`, so the full pipeline is exercised with zero network calls and the suite runs in under three seconds.
 
-**The LLM layer cannot compute anything.** The agent reads persisted outputs through five read-only tools and never recomputes a figure. Tool access is allowlisted — an unregistered name or an unexpected argument raises — and the tools have no write path. SHA-256 hashes of all four data files are unchanged across agent runs.
+**The LLM layer cannot compute anything.** The agent reads persisted outputs through five read-only tools and never recomputes a figure. Tool access is allowlisted — an unregistered name or an unexpected argument raises — and the tools have no write path. Tests snapshot the size and modification time of all four persisted data files and assert both are unchanged after every tool is called and after a full agent run.
 
 ---
 
