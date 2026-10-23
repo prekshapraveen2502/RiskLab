@@ -135,6 +135,8 @@ Run with `python -m pytest`. The `-m` form is required because there is no packa
 
 An optional layer that lets a language model answer questions about the risk results by calling deterministic tools, rather than by doing arithmetic itself.
 
+> **Status: implemented and tested, not yet run against a live model.** The agent loop, both provider adapters, and the tools are covered by tests that use scripted providers and stubbed SDK responses, so the request/response handling and tool dispatch are exercised. No request has been sent to the Gemini or OpenAI APIs yet. There is no saved agent transcript, and no claim here about the quality of the model's answers. The default model names are configuration values and haven't been checked against a live endpoint.
+
 ```bash
 export GEMINI_API_KEY=...          # or OPENAI_API_KEY
 export RISKLAB_LLM_PROVIDER=gemini # gemini (default) or openai
@@ -152,6 +154,7 @@ Credentials are read only from environment variables and are never written to th
 - **Kupiec tests breach frequency, not independence.** It would return the same verdict whether the 105 breaches were spread evenly or clustered in a single month. A Christoffersen independence test is the natural next addition.
 - **Historical VaR assumes the sample represents the future** and cannot anticipate a shock without precedent in the data.
 - **Expected Shortfall is estimated from a thin tail** — roughly 109 observations at 95% — so it is less stable than the VaR estimate.
+- **The LLM agent has only been tested offline.** Its grounding rules (call tools for every number, never recompute, don't treat a non-rejection as proof) are enforced by the system prompt, not checked against the model's output. Until it runs against a real model, how well it follows those rules is unknown.
 - **Single-machine and in-memory.** Every run recomputes the full history; there is no incremental or partitioned processing.
 - **Analysis dates and the rolling window are constants** in `run_pipeline.py`, not CLI arguments.
 - **No data versioning.** Outputs are overwritten in place, so a vendor revising historical prices leaves no trace.
