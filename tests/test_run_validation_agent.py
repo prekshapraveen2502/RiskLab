@@ -46,6 +46,33 @@ BREACH_EVIDENCE = {
 
 ANSWER = "Observed result: coverage was rejected. Limitations: clustering untested."
 
+RISK_SUMMARY = {
+    "portfolio": {"tickers": ["SPY", "TLT"], "weights": {"SPY": 0.6, "TLT": 0.4}},
+    "analysis_period": {
+        "start_date": "2019-01-02",
+        "end_date": "2024-12-31",
+        "price_observations": 1001,
+        "return_observations": 1000,
+    },
+    "risk_metrics": {"historical_var_95": 0.0125, "expected_shortfall_95": 0.0189},
+    "backtest": {
+        "observations": 750,
+        "breaches": 40,
+        "breach_rate": 0.05333333333333334,
+        "expected_breach_rate": 0.05,
+    },
+    "kupiec_test": {
+        "observations": 750,
+        "breaches": 40,
+        "observed_breach_rate": 0.05333333333333334,
+        "expected_breach_rate": 0.05,
+        "lr_statistic": 0.17123456789,
+        "p_value": 0.6790123456,
+        "significance_level": 0.05,
+        "reject_null": False,
+    },
+}
+
 
 class StubProvider:
     def __init__(self, model="gemini-3.7-flash"):
@@ -79,6 +106,13 @@ def stub_agent(monkeypatch):
     run.calls = []
     monkeypatch.setattr(entry_point, "run_validation_agent", run)
     return run
+
+
+@pytest.fixture
+def summary_path(tmp_path):
+    path = tmp_path / "risk_summary.json"
+    path.write_text(json.dumps(RISK_SUMMARY))
+    return path
 
 
 @pytest.fixture
@@ -243,36 +277,98 @@ def test_unsupported_provider_raises_typed_error(monkeypatch):
         entry_point.resolve_provider_name()
 
 
-def test_missing_gemini_api_key_fails_with_clear_message(
-    capsys, tmp_path, monkeypatch, stub_agent
+def test_missing_gemini_api_key_falls_back_to_deterministic_report(
+    capsys, tmp_path, monkeypatch, stub_agent, summary_path
 ):
     monkeypatch.delenv(entry_point.PROVIDER_ENV_VAR, raising=False)
     monkeypatch.delenv(GEMINI_API_KEY_ENV_VAR, raising=False)
+    report_dir = tmp_path / "reports"
 
-    exit_code = entry_point.main([], provider=StubProvider(), report_dir=tmp_path)
+    exit_code = entry_point.main(
+        [], provider=StubProvider(), report_dir=report_dir, summary_path=summary_path
+    )
 
     captured = capsys.readouterr()
 
-    assert exit_code == 2
+    assert exit_code == 0
     assert GEMINI_API_KEY_ENV_VAR in captured.err
     assert "is not set" in captured.err
+    assert "no LLM was called" in captured.err
     assert stub_agent.calls == []
-    assert not (tmp_path / entry_point.JSON_REPORT_NAME).exists()
+    assert "RiskLab Deterministic Validation Report" in captured.out
+    assert not (report_dir / entry_point.JSON_REPORT_NAME).exists()
+    assert not (report_dir / entry_point.MARKDOWN_REPORT_NAME).exists()
 
 
-def test_missing_openai_api_key_fails_with_clear_message(
-    capsys, tmp_path, monkeypatch, stub_agent
+def test_missing_openai_api_key_falls_back_to_deterministic_report(
+    capsys, tmp_path, monkeypatch, stub_agent, summary_path
 ):
     monkeypatch.setenv(entry_point.PROVIDER_ENV_VAR, "openai")
     monkeypatch.delenv(OPENAI_API_KEY_ENV_VAR, raising=False)
 
-    exit_code = entry_point.main([], provider=StubProvider(), report_dir=tmp_path)
+    exit_code = entry_point.main(
+        [],
+        provider=StubProvider(),
+        report_dir=tmp_path / "reports",
+        summary_path=summary_path,
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert OPENAI_API_KEY_ENV_VAR in captured.err
+    assert stub_agent.calls == []
+
+
+def test_fallback_report_persists_supplied_values(
+    capsys, tmp_path, monkeypatch, stub_agent, summary_path
+):
+    monkeypatch.delenv(entry_point.PROVIDER_ENV_VAR, raising=False)
+    monkeypatch.delenv(GEMINI_API_KEY_ENV_VAR, raising=False)
+    report_dir = tmp_path / "reports"
+
+    entry_point.main([], report_dir=report_dir, summary_path=summary_path)
+
+    report = (report_dir / entry_point.DETERMINISTIC_REPORT_NAME).read_text()
+    assert report == capsys.readouterr().out.split("\n\nReport written:")[0] + "\n"
+    assert "Kupiec p-value:       0.679012" in report
+    assert "not evidence that the model is correct" in report
+
+
+def test_fallback_with_missing_summary_fails_without_writing(
+    capsys, tmp_path, monkeypatch, stub_agent
+):
+    monkeypatch.delenv(entry_point.PROVIDER_ENV_VAR, raising=False)
+    monkeypatch.delenv(GEMINI_API_KEY_ENV_VAR, raising=False)
+    report_dir = tmp_path / "reports"
+
+    exit_code = entry_point.main(
+        [], report_dir=report_dir, summary_path=tmp_path / "missing.json"
+    )
 
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert OPENAI_API_KEY_ENV_VAR in captured.err
-    assert stub_agent.calls == []
+    assert "missing.json" in captured.err
+    assert "run_pipeline.py" in captured.err
+    assert captured.out == ""
+    assert not report_dir.exists()
+
+
+def test_fallback_with_malformed_summary_fails_clearly(
+    capsys, tmp_path, monkeypatch, stub_agent
+):
+    monkeypatch.delenv(entry_point.PROVIDER_ENV_VAR, raising=False)
+    monkeypatch.delenv(GEMINI_API_KEY_ENV_VAR, raising=False)
+    malformed = tmp_path / "risk_summary.json"
+    malformed.write_text(json.dumps({"portfolio": {}}))
+
+    exit_code = entry_point.main(
+        [], report_dir=tmp_path / "reports", summary_path=malformed
+    )
+
+    assert exit_code == 2
+    assert "cannot build the deterministic report" in capsys.readouterr().err
 
 
 def test_api_key_values_are_never_printed(

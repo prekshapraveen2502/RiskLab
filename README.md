@@ -36,7 +36,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 python run_pipeline.py             # fetch data, compute risk, backtest, persist
-python -m pytest -q                # 235 tests, no network required
+python -m pytest -q                # 238 tests, no network required
 ```
 
 Requires Python 3.11+ (developed on 3.14).
@@ -86,7 +86,7 @@ Orchestration is a single function, `run_analysis()` in `run_pipeline.py`. Each 
 
 **External data sits behind a protocol.** `MarketDataProvider` is a one-method `typing.Protocol`, and `run_analysis(provider=...)` accepts any implementation. Tests inject a `FakeProvider`, so the full pipeline is exercised with zero network calls and the suite runs in under three seconds.
 
-**The LLM layer cannot compute anything.** The agent reads persisted outputs through five read-only tools and never recomputes a figure. Tool access is allowlisted — an unregistered name or an unexpected argument raises — and the tools have no write path. SHA-256 hashes of all four data files are unchanged across agent runs.
+**The LLM layer cannot compute anything.** The agent reads persisted outputs through five read-only tools and never recomputes a figure. Tool access is allowlisted — an unregistered name or an unexpected argument raises — and the tools have no write path. Tests snapshot the size and modification time of all four persisted data files and assert both are unchanged after every tool is called and after a full agent run.
 
 ---
 
@@ -103,7 +103,7 @@ src/transformation/             return calculations
 src/risk/                       historical.py · rolling.py · backtesting.py
 src/ai/                         tools, agent loop, provider adapters, reporting
 
-tests/                          235 tests across 14 files
+tests/                          238 tests across 14 files
 data/processed/                 Parquet outputs + risk_summary.json
 ```
 
@@ -111,12 +111,12 @@ data/processed/                 Parquet outputs + risk_summary.json
 
 ## Testing
 
-235 tests, no network calls anywhere in the suite.
+238 tests, no network calls anywhere in the suite.
 
 | Area | Tests |
 |---|---|
 | Backtesting and Kupiec | 37 |
-| AI tools and agent loop | 61 |
+| AI tools and agent loop | 64 |
 | Historical VaR / ES | 21 |
 | Pipeline orchestration | 18 |
 | Provider adapters | 32 |
@@ -135,6 +135,8 @@ Run with `python -m pytest`. The `-m` form is required because there is no packa
 
 An optional layer that lets a language model answer questions about the risk results by calling deterministic tools, rather than by doing arithmetic itself.
 
+> **Status: implemented and tested, not yet run against a live model.** The agent loop, both provider adapters, and the tools are covered by tests that use scripted providers and stubbed SDK responses, so the request/response handling and tool dispatch are exercised. No request has been sent to the Gemini or OpenAI APIs yet. There is no saved agent transcript, and no claim here about the quality of the model's answers. The default model names are configuration values and haven't been checked against a live endpoint.
+
 ```bash
 export GEMINI_API_KEY=...          # or OPENAI_API_KEY
 export RISKLAB_LLM_PROVIDER=gemini # gemini (default) or openai
@@ -143,7 +145,7 @@ python run_validation_agent.py --verbose
 
 Five registered tools: `get_portfolio_risk_overview`, `get_model_validation_results`, `get_var_breach_details`, `get_worst_portfolio_days`, `get_period_risk_snapshot`. The model chooses which to call; the agent loop executes them and feeds results back, up to a six-step cap.
 
-Credentials are read only from environment variables and are never written to the repository or printed. Without a key the entry point exits with a clear message rather than failing partway through.
+Credentials are read only from environment variables and are never written to the repository or printed. Without a key the entry point makes no LLM call: it warns, then prints and saves a deterministic validation report built directly from `risk_summary.json` (`data/processed/deterministic_validation_report.txt`), with the same Kupiec interpretation and limitations the agent is instructed to follow.
 
 ---
 
@@ -152,6 +154,7 @@ Credentials are read only from environment variables and are never written to th
 - **Kupiec tests breach frequency, not independence.** It would return the same verdict whether the 105 breaches were spread evenly or clustered in a single month. A Christoffersen independence test is the natural next addition.
 - **Historical VaR assumes the sample represents the future** and cannot anticipate a shock without precedent in the data.
 - **Expected Shortfall is estimated from a thin tail** — roughly 109 observations at 95% — so it is less stable than the VaR estimate.
+- **The LLM agent has only been tested offline.** Its grounding rules (call tools for every number, never recompute, don't treat a non-rejection as proof) are enforced by the system prompt, not checked against the model's output. Until it runs against a real model, how well it follows those rules is unknown.
 - **Single-machine and in-memory.** Every run recomputes the full history; there is no incremental or partitioned processing.
 - **Analysis dates and the rolling window are constants** in `run_pipeline.py`, not CLI arguments.
 - **No data versioning.** Outputs are overwritten in place, so a vendor revising historical prices leaves no trace.
