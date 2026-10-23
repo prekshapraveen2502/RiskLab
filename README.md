@@ -36,7 +36,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 python run_pipeline.py             # fetch data, compute risk, backtest, persist
-python -m pytest -q                # 235 tests, no network required
+python -m pytest -q                # 238 tests, no network required
 ```
 
 Requires Python 3.11+ (developed on 3.14).
@@ -103,7 +103,7 @@ src/transformation/             return calculations
 src/risk/                       historical.py · rolling.py · backtesting.py
 src/ai/                         tools, agent loop, provider adapters, reporting
 
-tests/                          235 tests across 14 files
+tests/                          238 tests across 14 files
 data/processed/                 Parquet outputs + risk_summary.json
 ```
 
@@ -111,12 +111,12 @@ data/processed/                 Parquet outputs + risk_summary.json
 
 ## Testing
 
-235 tests, no network calls anywhere in the suite.
+238 tests, no network calls anywhere in the suite.
 
 | Area | Tests |
 |---|---|
 | Backtesting and Kupiec | 37 |
-| AI tools and agent loop | 61 |
+| AI tools and agent loop | 64 |
 | Historical VaR / ES | 21 |
 | Pipeline orchestration | 18 |
 | Provider adapters | 32 |
@@ -143,7 +143,7 @@ python run_validation_agent.py --verbose
 
 Five registered tools: `get_portfolio_risk_overview`, `get_model_validation_results`, `get_var_breach_details`, `get_worst_portfolio_days`, `get_period_risk_snapshot`. The model chooses which to call; the agent loop executes them and feeds results back, up to a six-step cap.
 
-Credentials are read only from environment variables and are never written to the repository or printed. Without a key the entry point exits with a clear message rather than failing partway through.
+Credentials are read only from environment variables and are never written to the repository or printed. Without a key the entry point makes no LLM call: it warns, then prints and saves a deterministic validation report built directly from `risk_summary.json` (`data/processed/deterministic_validation_report.txt`), with the same Kupiec interpretation and limitations the agent is instructed to follow.
 
 ---
 
