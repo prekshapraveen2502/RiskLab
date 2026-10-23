@@ -8,6 +8,8 @@ from src.ai.gemini_provider import GeminiProvider
 from src.ai.gemini_provider import API_KEY_ENV_VAR as GEMINI_API_KEY_ENV_VAR
 from src.ai.openai_provider import API_KEY_ENV_VAR as OPENAI_API_KEY_ENV_VAR
 from src.ai.openai_provider import OpenAIProvider
+from src.ai.reporting import build_deterministic_validation_report
+from src.ai.tools import RISK_SUMMARY_PATH
 from src.ai.validation_agent import run_validation_agent
 
 PROVIDER_ENV_VAR = "RISKLAB_LLM_PROVIDER"
@@ -36,6 +38,7 @@ DEFAULT_QUESTION = (
 REPORT_DIR = Path(__file__).parent / "data" / "processed"
 JSON_REPORT_NAME = "ai_validation_report.json"
 MARKDOWN_REPORT_NAME = "ai_validation_report.md"
+DETERMINISTIC_REPORT_NAME = "deterministic_validation_report.txt"
 
 
 class MissingCredentialsError(RuntimeError):
@@ -245,20 +248,60 @@ def save_reports(
     return {"json": json_path, "markdown": markdown_path}
 
 
+def run_deterministic_fallback(
+    summary_path: Path = RISK_SUMMARY_PATH,
+    report_dir: Path = REPORT_DIR,
+) -> int:
+    try:
+        summary = json.loads(Path(summary_path).read_text())
+        report = build_deterministic_validation_report(summary)
+    except (OSError, ValueError, KeyError) as error:
+        print(
+            f"Error: cannot build the deterministic report from {summary_path}: "
+            f"{type(error).__name__}: {error}. Run run_pipeline.py to regenerate it.",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(report)
+
+    report_dir = Path(report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / DETERMINISTIC_REPORT_NAME
+    report_path.write_text(report + "\n")
+
+    print()
+    print("Report written:")
+    print(f"  {report_path}")
+
+    return 0
+
+
 def main(
     argv=None,
     provider=None,
     report_dir: Path = REPORT_DIR,
     question: str = DEFAULT_QUESTION,
+    summary_path: Path = RISK_SUMMARY_PATH,
 ) -> int:
     args = parse_args(argv)
 
     try:
         provider_name = resolve_provider_name()
-        require_api_key(provider_name)
-    except (UnsupportedProviderError, MissingCredentialsError) as error:
+    except UnsupportedProviderError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
+
+    try:
+        require_api_key(provider_name)
+    except MissingCredentialsError as error:
+        # Without credentials, still deliver the validation evidence, just without an LLM.
+        print(f"Warning: {error}", file=sys.stderr)
+        print(
+            "Falling back to the deterministic validation report; no LLM was called.",
+            file=sys.stderr,
+        )
+        return run_deterministic_fallback(summary_path, report_dir)
 
     label = PROVIDERS[provider_name]["label"]
 
