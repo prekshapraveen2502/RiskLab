@@ -75,6 +75,13 @@ def parse_args(argv=None) -> argparse.Namespace:
         action="store_true",
         help="Also print the structured evidence returned by each tool.",
     )
+    parser.add_argument(
+        "--question",
+        help=(
+            "Question to put to the agent. Defaults to the standard "
+            "model-validation question."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -285,6 +292,12 @@ def main(
     summary_path: Path = RISK_SUMMARY_PATH,
 ) -> int:
     args = parse_args(argv)
+
+    if args.question is not None:
+        if not args.question.strip():
+            print("Error: --question must not be empty.", file=sys.stderr)
+            return 2
+        question = args.question
 
     try:
         provider_name = resolve_provider_name()

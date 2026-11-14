@@ -452,3 +452,62 @@ def test_failed_agent_execution_does_not_create_reports(
     assert not (tmp_path / entry_point.JSON_REPORT_NAME).exists()
     assert not (tmp_path / entry_point.MARKDOWN_REPORT_NAME).exists()
     assert list(tmp_path.iterdir()) == []
+
+
+CUSTOM_QUESTION = "Is there any sign that breaches cluster together?"
+
+
+def test_question_flag_is_passed_to_the_agent(tmp_path, with_api_key, stub_agent):
+    exit_code = entry_point.main(
+        ["--question", CUSTOM_QUESTION], provider=StubProvider(), report_dir=tmp_path
+    )
+
+    assert exit_code == 0
+    assert stub_agent.calls[0]["question"] == CUSTOM_QUESTION
+
+
+def test_default_question_is_used_without_the_flag(tmp_path, with_api_key, stub_agent):
+    exit_code = entry_point.main([], provider=StubProvider(), report_dir=tmp_path)
+
+    assert exit_code == 0
+    assert stub_agent.calls[0]["question"] == entry_point.DEFAULT_QUESTION
+
+
+def test_question_flag_is_recorded_in_both_reports(tmp_path, with_api_key, stub_agent):
+    entry_point.main(
+        ["--question", CUSTOM_QUESTION], provider=StubProvider(), report_dir=tmp_path
+    )
+
+    report = json.loads((tmp_path / entry_point.JSON_REPORT_NAME).read_text())
+    markdown = (tmp_path / entry_point.MARKDOWN_REPORT_NAME).read_text()
+
+    assert report["question"] == CUSTOM_QUESTION
+    assert CUSTOM_QUESTION in markdown
+    assert entry_point.DEFAULT_QUESTION not in markdown
+
+
+def test_question_flag_combines_with_verbose(tmp_path, with_api_key, stub_agent):
+    exit_code = entry_point.main(
+        ["--verbose", "--question", CUSTOM_QUESTION],
+        provider=StubProvider(),
+        report_dir=tmp_path,
+    )
+
+    assert exit_code == 0
+    assert stub_agent.calls[0]["question"] == CUSTOM_QUESTION
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\n\t "])
+def test_empty_question_flag_is_rejected(
+    capsys, tmp_path, with_api_key, stub_agent, empty
+):
+    exit_code = entry_point.main(
+        ["--question", empty], provider=StubProvider(), report_dir=tmp_path
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--question must not be empty" in captured.err
+    assert stub_agent.calls == []
+    assert list(tmp_path.iterdir()) == []
