@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from src.ai.gemini_provider import GeminiProvider
+from src.ai.grounding import audit_grounding, format_grounding_audit
 from src.ai.gemini_provider import API_KEY_ENV_VAR as GEMINI_API_KEY_ENV_VAR
 from src.ai.openai_provider import API_KEY_ENV_VAR as OPENAI_API_KEY_ENV_VAR
 from src.ai.openai_provider import OpenAIProvider
@@ -80,6 +81,15 @@ def parse_args(argv=None) -> argparse.Namespace:
         help=(
             "Question to put to the agent. Defaults to the standard "
             "model-validation question."
+        ),
+    )
+    parser.add_argument(
+        "--no-check-grounding",
+        action="store_false",
+        dest="check_grounding",
+        help=(
+            "Skip the grounding check. It only reports and never edits the "
+            "answer, so it runs by default."
         ),
     )
     return parser.parse_args(argv)
@@ -162,8 +172,9 @@ def build_json_report(
     model: str,
     question: str,
     result: dict,
+    grounding: dict | None = None,
 ) -> dict:
-    return {
+    report = {
         "provider": provider_name,
         "model": model,
         "question": question,
@@ -172,6 +183,21 @@ def build_json_report(
         "evidence_tools": evidence_tool_names(result),
         "steps": result.get("steps"),
     }
+
+    if grounding is not None:
+        report["grounding"] = {
+            key: grounding[key]
+            for key in (
+                "claims",
+                "grounded",
+                "weak",
+                "ungrounded",
+                "is_grounded",
+                "unmatched_dates",
+            )
+        }
+
+    return report
 
 
 def build_markdown_report(
@@ -232,6 +258,7 @@ def save_reports(
     question: str,
     result: dict,
     report_dir: Path = REPORT_DIR,
+    grounding: dict | None = None,
 ) -> dict:
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -242,7 +269,7 @@ def save_reports(
 
     json_path.write_text(
         json.dumps(
-            build_json_report(provider_name, model, question, result),
+            build_json_report(provider_name, model, question, result, grounding),
             indent=2,
             allow_nan=False,
         )
@@ -333,8 +360,19 @@ def main(
 
     print(format_result(label, provider.model, result, verbose=args.verbose))
 
+    grounding = None
+    if args.check_grounding:
+        grounding = audit_grounding(result)
+        print()
+        print(format_grounding_audit(grounding))
+
     paths = save_reports(
-        provider_name, provider.model, question, result, report_dir=report_dir
+        provider_name,
+        provider.model,
+        question,
+        result,
+        report_dir=report_dir,
+        grounding=grounding,
     )
     print()
     print("Reports written:")

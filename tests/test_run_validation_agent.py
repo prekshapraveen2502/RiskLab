@@ -511,3 +511,34 @@ def test_empty_question_flag_is_rejected(
     assert "--question must not be empty" in captured.err
     assert stub_agent.calls == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_grounding_check_runs_by_default(capsys, tmp_path, with_api_key, stub_agent):
+    entry_point.main([], provider=StubProvider(), report_dir=tmp_path)
+
+    output = capsys.readouterr().out
+    report = json.loads((tmp_path / entry_point.JSON_REPORT_NAME).read_text())
+
+    assert "Grounding Check:" in output
+    assert "grounding" in report
+    assert report["grounding"]["claims"] >= 0
+
+
+def test_no_check_grounding_switches_it_off(capsys, tmp_path, with_api_key, stub_agent):
+    entry_point.main(
+        ["--no-check-grounding"], provider=StubProvider(), report_dir=tmp_path
+    )
+
+    output = capsys.readouterr().out
+    report = json.loads((tmp_path / entry_point.JSON_REPORT_NAME).read_text())
+
+    assert "Grounding Check:" not in output
+    assert "grounding" not in report
+
+
+def test_grounding_check_never_edits_the_answer(tmp_path, with_api_key, stub_agent):
+    entry_point.main([], provider=StubProvider(), report_dir=tmp_path)
+
+    report = json.loads((tmp_path / entry_point.JSON_REPORT_NAME).read_text())
+
+    assert report["answer"] == ANSWER
