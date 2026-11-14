@@ -68,7 +68,7 @@ The agent answers questions about the risk results. It cannot compute anything.
 - **Five read-only tools**, registered in `TOOL_REGISTRY` (`src/ai/tools.py`): `get_portfolio_risk_overview`, `get_model_validation_results`, `get_var_breach_details`, `get_worst_portfolio_days`, `get_period_risk_snapshot`. Each reads the persisted Parquet and JSON files and returns a plain dict. None has a write path.
 - **Allowlisted dispatch.** `execute_tool()` rejects any unregistered tool name and any unexpected argument. There is no way for the model to reach code that was not explicitly exposed.
 - **Multi-step loop with a step cap.** `run_validation_agent()` sends the question plus the tool schemas, executes whatever tools the model asks for, feeds the results back, and repeats until the model returns text or hits six steps, at which point it raises rather than looping.
-- **All maths stays outside the model.** The system prompt instructs the model to read every number from a tool result and never recompute a statistic. Numbers in the sample runs below were checked against the tool results by hand; this is not yet enforced automatically (see [Limitations](#limitations)).
+- **All maths stays outside the model.** The system prompt instructs the model to read every number from a tool result and never recompute a statistic. A grounding check (`src/ai/grounding.py`) then verifies this automatically after every run: it extracts each number from the answer and confirms it traces to a value that run's tools actually returned.
 - **Every tool call is logged.** The result carries an ordered trace of each call with its arguments, plus the full tool output, which is what the saved transcripts contain.
 - **Two provider adapters** behind one Protocol: OpenAI (Responses API) and Gemini (google-genai). The agent loop does not know which is in use.
 
@@ -84,9 +84,24 @@ The agent has been **run live against OpenAI `gpt-4.1-mini`** on three questions
 
 Tool choice was not steered: the model picked `limit=5` for the "five worst" question and `limit=100` for the clustering question on its own.
 
-**Number check: 35 numeric claims across the three answers, 0 mismatches.** Every figure traced to a value returned by a tool in that same run, at the precision the model stated. This was verified by a one-off script plus a manual check of the most number-dense answer — **not** by an automated grounding check, which does not exist yet.
+**Grounding check: 35 numeric claims across the three answers, 0 ungrounded.** 24 were strongly grounded and 11 fell in the weak bucket (zero decimal places or fewer than two significant figures, so they match too easily to count as strong evidence). Every quoted date was present in that run's tool output. The figures were also checked by hand against the tool results for the most number-dense answer.
 
 `data/processed/ai_validation_report.json` and `.md` are the agent's own output from **run 03** (the clustering question), left in place by the last live run. They are real model output, not the deterministic fallback described below.
+
+### Grounding check
+
+`audit_grounding()` runs after every agent run (disable with `--no-check-grounding`). For each number in the answer it searches that run's tool output for a supporting value, where a claim stated to *d* decimal places admits half a unit in the last place:
+
+| Match kind | Rule |
+|---|---|
+| `direct` | the tool returned the value as stated |
+| `percent` | the model wrote a decimal as a percentage |
+| `complement` | a confidence level read from a significance level, **only** for fields whose name contains "significance" or "confidence" |
+| `absolute_value` | magnitudes agree but signs differ, recorded as such |
+
+Each claim records how it matched and how many distinct evidence values it matched — more than one means the claim is ambiguous. Claims with no decimals or fewer than two significant figures are reported in a separate **weak** bucket rather than counted as strongly grounded. Dates, and list ordinals at the start of a line, are masked before extraction and counted in the output, so anything the check declines to inspect is visible rather than silently dropped.
+
+The check only ever reports. It never edits the model's answer.
 
 **The Gemini adapter has only been tested with mocked SDK responses.** No request has been sent to a Gemini endpoint, and `gemini-3.7-flash` is an unverified configuration value.
 
@@ -100,7 +115,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 python run_pipeline.py             # fetch data, compute risk, backtest, persist
-python -m pytest -q                # 245 tests, no network required
+python -m pytest -q                # 279 tests, no network required
 ```
 
 Requires Python 3.11+ (developed on 3.14).
@@ -131,12 +146,12 @@ python run_validation_agent.py --verbose --question "Is there any sign that brea
 
 ## Testing
 
-245 tests, no network calls anywhere in the suite.
+279 tests, no network calls anywhere in the suite.
 
 | Area | Tests |
 |---|---|
 | Backtesting and Kupiec | 37 |
-| AI tools and agent loop | 71 |
+| AI tools and agent loop | 74 |
 | Historical VaR / ES | 21 |
 | Pipeline orchestration | 18 |
 | Provider adapters | 32 |
@@ -144,6 +159,7 @@ python run_validation_agent.py --verbose --question "Is there any sign that brea
 | Persistence round-trip | 15 |
 | Returns and validation | 26 |
 | Reporting | 10 |
+| Grounding check | 31 |
 
 Two tests carry most of the weight:
 
@@ -160,7 +176,8 @@ Run with `python -m pytest`. The `-m` form is required because there is no packa
 ## Limitations
 
 - **Kupiec tests breach frequency, not independence.** It would return the same verdict whether the 105 breaches were spread evenly or clustered in a single month. A Christoffersen independence test is the natural next addition and is **not built**. Run 03 shows the agent itself identifying the March 2020 cluster and recommending exactly this test.
-- **No automated grounding check.** The 0-mismatch result above came from a one-off script and a manual check, not from code in this repository. Nothing currently prevents a future model answer from containing an unsupported number, beyond the system prompt asking it not to.
+- **The grounding check is string matching, not verification.** It confirms that a number appears in the tool output; it cannot catch a correctly sourced figure used to support a wrong claim, a right value attached to the wrong date, or a false statement containing no numbers. Where a claim matches several evidence values the reported source may be a coincidence — in run 02 the model's "5.0%" is attributed to `returned: 5` rather than the breach magnitude it meant, which is what the distinct-match count is there to expose.
+- **Weak claims are not strongly verified.** 11 of the 35 claims in the sample runs are low precision (for example "105 breaches" or "5%"), so they match within half a unit of more than one plausible value.
 - **Only the OpenAI adapter has run live.** The Gemini adapter is tested with mocks only, and its default model name is unverified against a real endpoint.
 - **Historical VaR assumes the sample represents the future** and cannot anticipate a shock without precedent in the data.
 - **Expected Shortfall is estimated from a thin tail** — roughly 109 observations at 95% — so it is less stable than the VaR estimate.
