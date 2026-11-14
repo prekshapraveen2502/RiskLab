@@ -84,9 +84,35 @@ To better understand the model's performance, I recommend analyzing the overall 
 
 ## Number check
 
-- Numeric claims extracted from the final answer: **17**
-- Claims not traceable to this run's tool results: **0**
-- Dates quoted that do not appear in tool results: **0**
+Produced by `audit_grounding()` in `src/ai/grounding.py`, run against this run's own tool results. A claim stated to *d* decimal places is grounded if some evidence value sits within half a unit in the last place; claims with no decimals or fewer than two significant figures are reported as **weak** rather than counted as strongly grounded.
 
-Every number in the final answer traces to a value returned by a tool in this run (percentages matched against the decimal the tool returned, rounded to the precision the model stated).
+- Numeric claims extracted: **17**
+- Strongly grounded: **17**
+- Weak (low precision): **0**
+- Ungrounded: **0**
+- Dates checked: **5** (not found in tool results: 0)
+- Masked before extraction: dates 5, ordinals 4
 
+**Strongly grounded**
+
+| Claim | Matched by | Distinct evidence values | Source field |
+|---|---|---|---|
+| `-5.78%` | percent | 1 | `get_var_breach_details.breaches[0].portfolio_return` |
+| `-0.74%` | percent | 2 | `get_var_breach_details.breaches[0].var_forecast` |
+| `5.04%` | percent | 1 | `get_var_breach_details.breaches[0].breach_magnitude` |
+| `-5.38%` | percent | 1 | `get_var_breach_details.breaches[1].portfolio_return` |
+| `-0.76%` | percent | 2 | `get_var_breach_details.breaches[1].var_forecast` |
+| `4.62%` | percent | 1 | `get_var_breach_details.breaches[1].breach_magnitude` |
+| `-4.22%` | percent | 1 | `get_var_breach_details.breaches[2].portfolio_return` |
+| `-0.78%` | percent | 2 | `get_var_breach_details.breaches[2].var_forecast` |
+| `3.44%` | percent | 1 | `get_var_breach_details.breaches[2].breach_magnitude` |
+| `-3.81%` | percent | 1 | `get_var_breach_details.breaches[3].portfolio_return` |
+| `-0.70%` | percent | 2 | `get_var_breach_details.breaches[3].var_forecast` |
+| `3.11%` | percent | 1 | `get_var_breach_details.breaches[3].breach_magnitude` |
+| `-3.45%` | percent | 1 | `get_var_breach_details.breaches[4].portfolio_return` |
+| `-0.73%` | percent | 2 | `get_var_breach_details.breaches[4].var_forecast` |
+| `2.72%` | percent | 1 | `get_var_breach_details.breaches[4].breach_magnitude` |
+| `2.7%` | percent | 1 | `get_var_breach_details.breaches[4].breach_magnitude` |
+| `5.0%` | direct | 2 | `get_var_breach_details.returned` |
+
+No number in the final answer is unaccounted for. This is a string-level traceability check: it cannot confirm that a correctly sourced figure is used to support a correct claim.

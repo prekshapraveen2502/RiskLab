@@ -88,9 +88,41 @@ Summarize the backtest results and whether the VaR model passes the Kupiec test.
 
 ## Number check
 
-- Numeric claims extracted from the final answer: **18**
-- Claims not traceable to this run's tool results: **0**
-- Dates quoted that do not appear in tool results: **0**
+Produced by `audit_grounding()` in `src/ai/grounding.py`, run against this run's own tool results. A claim stated to *d* decimal places is grounded if some evidence value sits within half a unit in the last place; claims with no decimals or fewer than two significant figures are reported as **weak** rather than counted as strongly grounded.
 
-Every number in the final answer traces to a value returned by a tool in this run (percentages matched against the decimal the tool returned, rounded to the precision the model stated).
+- Numeric claims extracted: **18**
+- Strongly grounded: **7**
+- Weak (low precision): **11**
+- Ungrounded: **0**
+- Dates checked: **2** (not found in tool results: 0)
+- Masked before extraction: dates 2, ordinals 4
 
+**Strongly grounded**
+
+| Claim | Matched by | Distinct evidence values | Source field |
+|---|---|---|---|
+| `0.15` | direct | 1 | `get_portfolio_risk_overview.weights.HYG` |
+| `0.15` | direct | 1 | `get_portfolio_risk_overview.weights.HYG` |
+| `1.16%` | percent | 1 | `get_portfolio_risk_overview.historical_var_95` |
+| `1.79%` | percent | 1 | `get_portfolio_risk_overview.expected_shortfall_95` |
+| `5.45%` | percent | 1 | `get_model_validation_results.observed_breach_rate` |
+| `0.805` | direct | 1 | `get_model_validation_results.kupiec_lr_statistic` |
+| `0.37` | direct | 1 | `get_model_validation_results.kupiec_p_value` |
+
+**Weak**
+
+| Claim | Matched by | Distinct evidence values | Source field |
+|---|---|---|---|
+| `2176` | direct | 1 | `get_portfolio_risk_overview.return_observations` |
+| `0.3` | direct | 1 | `get_portfolio_risk_overview.weights.SPY` |
+| `0.2` | direct | 1 | `get_portfolio_risk_overview.weights.QQQ` |
+| `0.2` | direct | 1 | `get_portfolio_risk_overview.weights.QQQ` |
+| `95%` | complement | 1 | `get_model_validation_results.significance_level` |
+| `95%` | complement | 1 | `get_model_validation_results.significance_level` |
+| `1926` | direct | 1 | `get_model_validation_results.evaluated_forecasts` |
+| `105` | direct | 1 | `get_model_validation_results.breaches` |
+| `5%` | percent | 3 | `get_model_validation_results.observed_breach_rate` |
+| `5%` | percent | 3 | `get_model_validation_results.observed_breach_rate` |
+| `5%` | percent | 3 | `get_model_validation_results.observed_breach_rate` |
+
+No number in the final answer is unaccounted for. This is a string-level traceability check: it cannot confirm that a correctly sourced figure is used to support a correct claim.

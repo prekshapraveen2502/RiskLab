@@ -744,9 +744,13 @@ To strengthen the assessment, I recommend analyzing the time series of breaches 
 
 ## Number check
 
-- Numeric claims extracted from the final answer: **0**
-- Claims not traceable to this run's tool results: **0**
-- Dates quoted that do not appear in tool results: **0**
+Produced by `audit_grounding()` in `src/ai/grounding.py`, run against this run's own tool results. A claim stated to *d* decimal places is grounded if some evidence value sits within half a unit in the last place; claims with no decimals or fewer than two significant figures are reported as **weak** rather than counted as strongly grounded.
 
-Every number in the final answer traces to a value returned by a tool in this run (percentages matched against the decimal the tool returned, rounded to the precision the model stated).
+- Numeric claims extracted: **0**
+- Strongly grounded: **0**
+- Weak (low precision): **0**
+- Ungrounded: **0**
+- Dates checked: **0** (not found in tool results: 0)
+- Masked before extraction: dates 6, ordinals 4
 
+No number in the final answer is unaccounted for. This is a string-level traceability check: it cannot confirm that a correctly sourced figure is used to support a correct claim.
