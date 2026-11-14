@@ -6,3 +6,7 @@ __pycache__/
 
 data/raw/*.parquet
 data/processed/*.parquet
+
+.env
+.env.*
+!.env.example
