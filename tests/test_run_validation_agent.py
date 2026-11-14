@@ -155,13 +155,13 @@ def test_openai_provider_label_is_displayed(
     monkeypatch.setenv(OPENAI_API_KEY_ENV_VAR, FAKE_OPENAI_KEY)
 
     entry_point.main(
-        [], provider=StubProvider(model="gpt-5.6-luna"), report_dir=tmp_path
+        [], provider=StubProvider(model="gpt-4.1-mini"), report_dir=tmp_path
     )
 
     output = capsys.readouterr().out
 
     assert "Provider: OpenAI" in output
-    assert "Model: gpt-5.6-luna" in output
+    assert "Model: gpt-4.1-mini" in output
 
 
 def test_selected_tool_names_are_displayed(capsys, tmp_path, with_api_key, stub_agent):

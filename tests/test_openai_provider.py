@@ -94,10 +94,12 @@ def test_model_defaults_when_env_var_absent(monkeypatch):
 
 
 def test_model_comes_from_environment_variable(monkeypatch):
-    monkeypatch.setenv(MODEL_ENV_VAR, "gpt-4.1-mini")
+    # Deliberately not DEFAULT_MODEL, so the test fails if the env var is ignored.
+    monkeypatch.setenv(MODEL_ENV_VAR, "gpt-4.1")
 
-    assert resolve_model() == "gpt-4.1-mini"
-    assert OpenAIProvider(client=FakeClient([])).model == "gpt-4.1-mini"
+    assert "gpt-4.1" != DEFAULT_MODEL
+    assert resolve_model() == "gpt-4.1"
+    assert OpenAIProvider(client=FakeClient([])).model == "gpt-4.1"
 
 
 def test_explicit_model_overrides_environment(monkeypatch):

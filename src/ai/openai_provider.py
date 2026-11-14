@@ -5,7 +5,7 @@ from src.ai.provider import ProviderResponse, ToolCall
 
 API_KEY_ENV_VAR = "OPENAI_API_KEY"
 MODEL_ENV_VAR = "RISKLAB_LLM_MODEL"
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "gpt-4.1-mini"
 
 
 def resolve_model(model: str | None = None) -> str:
